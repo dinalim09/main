@@ -81,31 +81,54 @@
        SCENE 3 · CHECK-OUT (영수증)
   ════════════════════════════════ -->
   <section id="scene-checkout" class="scene">
-    <div class="receipt-wrap glass" id="receipt">
-      <p class="receipt-hotel">HWAKANCE HOTEL</p>
-      <p class="receipt-title">CHECKOUT RECEIPT</p>
-      <hr class="receipt-rule">
+    <!-- 롤휴지 영수증 -->
+    <div id="receipt" class="receipt-paper">
 
-      <table class="receipt-table" id="receipt-table">
-        <tbody>
-          <!-- JS가 동적으로 행 삽입 -->
-        </tbody>
-      </table>
-
-      <hr class="receipt-rule dashed">
-
-      <div class="receipt-total-row">
-        <span>TOTAL LUXURY</span>
-        <span id="receipt-total">0 pts</span>
+      <!-- 섹션 1: 호텔 헤더 -->
+      <div class="receipt-section receipt-header">
+        <p class="receipt-hotel-name">HWAKANCE HOTEL</p>
+        <p class="receipt-ornament">— ✦ —</p>
+        <p class="receipt-suite-title">[ 0.5평 냥-스위트 체크아웃 ]</p>
       </div>
 
-      <div class="receipt-cat">
-        ( ♡ ᆺ ♡ )<br>
-        <span class="paw">ﾉ　 ﾉ</span>
+      <div class="perforation"></div>
+
+      <!-- 섹션 2: 서비스 정보 -->
+      <div class="receipt-section receipt-service">
+        <div class="receipt-row">
+          <span class="r-key">Service</span>
+          <span class="r-val">Cat Synchronization</span>
+        </div>
+        <div class="receipt-row">
+          <span class="r-key">Duration</span>
+          <span class="r-val" id="receipt-duration">03:00</span>
+        </div>
+        <div class="receipt-row">
+          <span class="r-key">Status</span>
+          <span class="r-val">Fully Recharged</span>
+        </div>
       </div>
 
-      <p class="receipt-msg">갓생 복귀를 축하드립니다.</p>
-      <p class="receipt-date" id="receipt-date"></p>
+      <div class="perforation"></div>
+
+      <!-- 섹션 3: 수치 (JS가 채움) -->
+      <div class="receipt-section receipt-stats" id="receipt-stats">
+        <!-- JS: Clean-up, Empathy, Stress 행 삽입 -->
+      </div>
+
+      <div class="perforation"></div>
+
+      <!-- 섹션 4: 클로징 -->
+      <div class="receipt-section receipt-closing">
+        <p class="receipt-quote">"인간, 다시 갓생 살 준비 됐나?"</p>
+        <p class="cat-stamp">( ♡ ᆺ ♡ )</p>
+        <p class="cat-stamp-label">[ 고양이 발바닥 도장 ]</p>
+        <p class="receipt-date" id="receipt-date"></p>
+      </div>
+
+      <!-- 하단 절취 지그재그 -->
+      <div class="receipt-tear"></div>
+
     </div>
 
     <div class="checkout-actions">
