@@ -6,65 +6,165 @@ const { Engine, Render, Runner, Bodies, Composite,
         Mouse, MouseConstraint, Body } = Matter;
 
 // ── State ─────────────────────────────────
-let cleanupScore   = 0;
-let empathyScore   = 0;
+let cleanupScore    = 0;
+let empathyScore    = 0;
 let stressReduction = 0;
-let isStayActive   = false;
-let timerInterval  = null;
-let timeLeft       = 180;
+let isStayActive    = false;
+let timerInterval   = null;
+let timeLeft        = 180;
+let blinkTimer      = null;
 
 // Physics
 let engine, render, runner, catBody;
 
-// Blink
-let blinkTimer = null;
-
 // Pointer tracking
-let pressStart    = null;
-let lastPos       = null;
-let lastMoveTime  = null;
-let velocity      = 0;
+let pressStart     = null;
+let lastPos        = null;
+let lastMoveTime   = null;
+let velocity       = 0;
 let longPressTimer = null;
 let strokeThrottle = null;
 
 const LONG_PRESS_MS   = 600;
-const FAST_THRESHOLD  = 320; // px/s
-const STROKE_THROTTLE = 380; // ms between stroke popups
+const FAST_THRESHOLD  = 320;
+const STROKE_THROTTLE = 380;
 
-// ── Cat faces ─────────────────────────────
-const FACES = {
-  idle:      '( ˘ ᆺ ˘ )',
-  blink:     '( - ᆺ - )',
-  slow:      '( ´ ᆺ ` )',
-  fast:      '( o ᆺ o ) !',
-  tap:       '( ･ ᆺ･)',
-  longpress: '( ♡ ᆺ ♡ )',
-};
+// ── Web Audio ──────────────────────────────
+let audioCtx = null;
+let bgmNodes = null;
+let isMuted  = false;
 
-function setCatFace(key, ms = 1200) {
-  const el = document.getElementById('cat-ascii-main');
-  el.textContent = FACES[key] ?? FACES.idle;
-  clearTimeout(el._faceTimer);
-  el._faceTimer = setTimeout(() => {
-    el.textContent = FACES.idle;
-  }, ms);
+function getAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
 }
 
-// ── Blink loop ────────────────────────────
-function scheduleNextBlink() {
-  blinkTimer = setTimeout(() => {
-    if (!isStayActive) return;
-    const el = document.getElementById('cat-ascii-main');
-    if (el.textContent === FACES.idle) {
-      el.textContent = FACES.blink;
-      setTimeout(() => {
-        if (el.textContent === FACES.blink) el.textContent = FACES.idle;
-        scheduleNextBlink();
-      }, 110);
-    } else {
-      scheduleNextBlink();
-    }
-  }, 2800 + Math.random() * 3500);
+function playChime() {
+  if (isMuted) return;
+  const ctx  = getAudioCtx();
+  const now  = ctx.currentTime;
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+
+  [880, 1320, 1760].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.gain.setValueAtTime(0, now + i * 0.07);
+    gain.gain.linearRampToValueAtTime(0.18, now + i * 0.07 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.55);
+    osc.start(now + i * 0.07);
+    osc.stop(now + i * 0.07 + 0.6);
+  });
+}
+
+function playCoin() {
+  if (isMuted) return;
+  const ctx  = getAudioCtx();
+  const now  = ctx.currentTime;
+  const osc  = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(520, now);
+  osc.frequency.exponentialRampToValueAtTime(1280, now + 0.07);
+  gain.gain.setValueAtTime(0.18, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  osc.start(now);
+  osc.stop(now + 0.2);
+}
+
+function playPaperTear() {
+  if (isMuted) return;
+  const ctx      = getAudioCtx();
+  const now      = ctx.currentTime;
+  const duration = 0.55;
+  const sr       = ctx.sampleRate;
+  const buf      = ctx.createBuffer(1, Math.floor(sr * duration), sr);
+  const data     = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const t    = i / data.length;
+    const env  = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+    data[i] = (Math.random() * 2 - 1) * env * Math.exp(-t * 3);
+  }
+  const source = ctx.createBufferSource();
+  source.buffer = buf;
+  const bpf = ctx.createBiquadFilter();
+  bpf.type = 'bandpass';
+  bpf.frequency.value = 3800;
+  bpf.Q.value = 0.8;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.5;
+  source.connect(bpf);
+  bpf.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(now);
+}
+
+function startBGM() {
+  if (bgmNodes || isMuted) return;
+  const ctx = getAudioCtx();
+
+  // 골골송 기반: sawtooth 저주파 + LFO (purr)
+  const purr     = ctx.createOscillator();
+  const lfo      = ctx.createOscillator();
+  const lfoGain  = ctx.createGain();
+  const purrGain = ctx.createGain();
+  const lpf      = ctx.createBiquadFilter();
+
+  lfo.type = 'sine';
+  lfo.frequency.value = 22;
+  lfoGain.gain.value  = 18;
+
+  purr.type = 'sawtooth';
+  purr.frequency.value = 100;
+  lpf.type = 'lowpass';
+  lpf.frequency.value = 280;
+  purrGain.gain.value = 0.055;
+
+  lfo.connect(lfoGain);
+  lfoGain.connect(purr.frequency);
+  purr.connect(lpf);
+  lpf.connect(purrGain);
+  purrGain.connect(ctx.destination);
+
+  // 앰비언트 드론 (Lo-Fi 감성)
+  const drone     = ctx.createOscillator();
+  const droneGain = ctx.createGain();
+  drone.type = 'sine';
+  drone.frequency.value = 55;
+  droneGain.gain.value  = 0.03;
+  drone.connect(droneGain);
+  droneGain.connect(ctx.destination);
+
+  lfo.start();
+  purr.start();
+  drone.start();
+
+  bgmNodes = { purr, lfo, drone };
+}
+
+function stopBGM() {
+  if (!bgmNodes) return;
+  try { bgmNodes.purr.stop();  } catch (_) {}
+  try { bgmNodes.lfo.stop();   } catch (_) {}
+  try { bgmNodes.drone.stop(); } catch (_) {}
+  bgmNodes = null;
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  document.getElementById('btn-mute').textContent = isMuted ? '🔇' : '🔊';
+  if (isMuted) {
+    stopBGM();
+  } else if (isStayActive) {
+    startBGM();
+  }
 }
 
 // ── Scene management ──────────────────────
@@ -73,42 +173,57 @@ function showScene(id) {
   document.getElementById(id).classList.add('active');
 }
 
-// ── Status popup ──────────────────────────
-function spawnPopup(text, x, y) {
+// ── Blink loop (cat-sprite filter 로 표현) ─
+function scheduleNextBlink() {
+  blinkTimer = setTimeout(() => {
+    if (!isStayActive) return;
+    const sprite = document.getElementById('cat-sprite');
+    if (!sprite) return;
+    sprite.style.filter =
+      'drop-shadow(0 18px 48px rgba(0,0,0,0.88)) drop-shadow(0 6px 14px rgba(0,0,0,0.72)) brightness(1.6)';
+    setTimeout(() => {
+      if (sprite) sprite.style.filter = '';
+      scheduleNextBlink();
+    }, 90);
+  }, 2800 + Math.random() * 3500);
+}
+
+// ── Status popup (이모지) ─────────────────
+function spawnPopup(icon, x, y) {
   const layer = document.getElementById('popup-layer');
-  const el = document.createElement('div');
-  el.className = 'status-popup';
-  el.textContent = text;
-  el.style.left = `${x - 55}px`;
-  el.style.top  = `${y - 28}px`;
+  const el    = document.createElement('div');
+  el.className   = 'status-popup';
+  el.textContent = icon;
+  el.style.left  = `${x - 18}px`;
+  el.style.top   = `${y - 32}px`;
   layer.appendChild(el);
-  setTimeout(() => el.remove(), 1350);
+  setTimeout(() => el.remove(), 1400);
 }
 
 // ── Interaction handlers ──────────────────
 function triggerSlow(x, y) {
   cleanupScore += 5;
   empathyScore += 2;
-  setCatFace('slow', 1000);
-  spawnPopup('Luxury +5', x, y);
+  const icons = ['💖', '✨', '💖', '✨', '🌸'];
+  spawnPopup(icons[Math.floor(Math.random() * icons.length)], x, y);
+  playChime();
   if (navigator.vibrate) navigator.vibrate(80);
 }
 
 function triggerFast(x, y) {
-  cleanupScore += 20;
+  cleanupScore    += 20;
   stressReduction += 3;
-  setCatFace('fast', 750);
-  spawnPopup('Energy +20', x, y);
-  if (navigator.vibrate) navigator.vibrate([30, 15, 30]);
+  spawnPopup('⚡', x, y);
+  playCoin();
+  if (navigator.vibrate) navigator.vibrate([25, 10, 25]);
 }
 
 function triggerTap(x, y) {
   cleanupScore += 1;
-  setCatFace('tap', 600);
-  spawnPopup('Ping 1ms', x, y);
-  if (navigator.vibrate) navigator.vibrate(14);
+  spawnPopup('✨', x, y);
+  playCoin();
+  if (navigator.vibrate) navigator.vibrate(12);
 
-  // 튕기는 물리 효과 — 고양이 몸체에 임펄스
   if (catBody) {
     Body.applyForce(catBody, catBody.position, {
       x: (Math.random() - 0.5) * 0.06,
@@ -118,16 +233,17 @@ function triggerTap(x, y) {
 
   const container = document.getElementById('cat-container');
   container.classList.add('cat-bounce');
-  setTimeout(() => container.classList.remove('cat-bounce'), 300);
+  setTimeout(() => container.classList.remove('cat-bounce'), 340);
 }
 
 function triggerLongPress(x, y) {
   empathyScore += 5;
-  setCatFace('longpress', 2200);
-  spawnPopup('Empathy +5', x, y);
-  // 심박수 리듬 진동
+  spawnPopup('💖', x, y);
+  setTimeout(() => spawnPopup('💖', x - 30, y - 20), 180);
+  setTimeout(() => spawnPopup('💖', x + 20, y - 10), 320);
+  playChime();
   if (navigator.vibrate) navigator.vibrate([65, 38, 65, 38, 65]);
-  pressStart = null; // consume so pointerup does nothing
+  pressStart = null;
 }
 
 // ── Pointer events ────────────────────────
@@ -178,7 +294,6 @@ function onPointerUp(e) {
   const duration = Date.now() - pressStart;
   pressStart = null;
 
-  // Tap: 짧고 거의 움직임 없음
   if (duration < 220 && velocity < 90) {
     triggerTap(e.clientX, e.clientY);
   }
@@ -186,9 +301,9 @@ function onPointerUp(e) {
 
 function initCatEvents() {
   const stage = document.getElementById('cat-stage');
-  stage.addEventListener('pointerdown',  onPointerDown,  { passive: false });
-  stage.addEventListener('pointermove',  onPointerMove,  { passive: false });
-  stage.addEventListener('pointerup',    onPointerUp);
+  stage.addEventListener('pointerdown',   onPointerDown,  { passive: false });
+  stage.addEventListener('pointermove',   onPointerMove,  { passive: false });
+  stage.addEventListener('pointerup',     onPointerUp);
   stage.addEventListener('pointercancel', () => {
     clearTimeout(longPressTimer);
     pressStart = null;
@@ -214,11 +329,10 @@ function initPhysics() {
     },
   });
 
-  // Canvas는 ASCII 아트 뒤 반투명 레이어
   Object.assign(render.canvas.style, {
     position:      'absolute',
     inset:         '0',
-    opacity:       '0.13',
+    opacity:       '0.08',
     pointerEvents: 'none',
     zIndex:        '0',
   });
@@ -226,7 +340,7 @@ function initPhysics() {
   catBody = Bodies.circle(W / 2, H / 2, 52, {
     restitution: 0.78,
     friction:    0.04,
-    render: { fillStyle: 'rgba(201,168,76,0.7)', strokeStyle: 'transparent', lineWidth: 0 },
+    render: { fillStyle: 'rgba(201,168,76,0.55)', strokeStyle: 'transparent', lineWidth: 0 },
   });
 
   const wall = (x, y, w, h) =>
@@ -240,9 +354,8 @@ function initPhysics() {
     wall(W + 25, H / 2,  50, H + 50),
   ]);
 
-  // Matter.js 마우스는 ASCII 레이어 위 터치 이벤트와 분리
   const mouse = Mouse.create(render.canvas);
-  const mc = MouseConstraint.create(engine, {
+  const mc    = MouseConstraint.create(engine, {
     mouse,
     constraint: { stiffness: 0.18, render: { visible: false } },
   });
@@ -263,12 +376,12 @@ function startTimer() {
   const bar   = document.getElementById('timer-bar');
   const label = document.getElementById('timer-label');
   bar.style.setProperty('--progress', '1');
-  label.textContent = fmt(timeLeft);
+  label.textContent = `🐾 ${fmt(timeLeft)}`;
 
   timerInterval = setInterval(() => {
     timeLeft = Math.max(0, timeLeft - 1);
     bar.style.setProperty('--progress', (timeLeft / 180).toFixed(4));
-    label.textContent = fmt(timeLeft);
+    label.textContent = `🐾 ${fmt(timeLeft)}`;
     if (timeLeft <= 0) {
       clearInterval(timerInterval);
       endStay();
@@ -303,30 +416,32 @@ function buildReceipt() {
 
 function endStay() {
   isStayActive = false;
+  stopBGM();
+  playPaperTear();
   buildReceipt();
   showScene('scene-checkout');
 }
 
 // ── Save receipt (html2canvas → PNG) ─────
 function saveReceipt() {
-  const el = document.getElementById('receipt');
+  const el  = document.getElementById('receipt');
   const btn = document.getElementById('btn-save');
   btn.textContent = '저장 중...';
-  btn.disabled = true;
+  btn.disabled    = true;
 
   html2canvas(el, {
-    scale: 2,
+    scale:           2,
     backgroundColor: '#ffffff',
-    useCORS: true,
-    logging: false,
+    useCORS:         true,
+    logging:         false,
   }).then(canvas => {
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = `hwakance-receipt-${new Date().toISOString().slice(0,10)}.png`;
+    const a      = document.createElement('a');
+    a.href       = canvas.toDataURL('image/png');
+    a.download   = `hwakance-receipt-${new Date().toISOString().slice(0, 10)}.png`;
     a.click();
   }).finally(() => {
     btn.textContent = '영수증 저장';
-    btn.disabled = false;
+    btn.disabled    = false;
   });
 }
 
@@ -342,15 +457,17 @@ document.getElementById('btn-checkin').addEventListener('click', () => {
   initPhysics();
   startTimer();
   scheduleNextBlink();
+  startBGM();
   if (navigator.vibrate) navigator.vibrate(120);
 });
 
+document.getElementById('btn-mute').addEventListener('click', toggleMute);
+
 document.getElementById('btn-restart').addEventListener('click', () => {
-  // 타이머·blink 정리
   clearTimeout(blinkTimer);
   blinkTimer = null;
+  stopBGM();
 
-  // Matter.js 정리 후 재시작
   if (runner) Runner.stop(runner);
   if (render) {
     Render.stop(render);
@@ -358,13 +475,9 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   }
   if (engine) Engine.clear(engine);
 
-  // 고양이 얼굴 초기화
-  document.getElementById('cat-ascii-main').textContent = FACES.idle;
-
-  // 타이머 초기화
   clearInterval(timerInterval);
   document.getElementById('timer-bar').style.setProperty('--progress', '1');
-  document.getElementById('timer-label').textContent = '03:00';
+  document.getElementById('timer-label').textContent = '🐾 03:00';
 
   showScene('scene-checkin');
 });

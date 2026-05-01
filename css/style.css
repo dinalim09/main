@@ -204,12 +204,39 @@ body::before {
 #scene-stay {
   justify-content: space-between;
   padding: 0;
+  /* 호텔 실사 배경 — img/hotel-bg.jpg 를 배치하면 자동 적용 */
+  background:
+    linear-gradient(to bottom,
+      rgba(13,27,42,0.62) 0%,
+      rgba(13,27,42,0.28) 45%,
+      rgba(13,27,42,0.72) 100%),
+    url('../img/hotel-bg.jpg') center / cover no-repeat;
 }
+
+/* BGM 토글 버튼 */
+.btn-mute {
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  z-index: 20;
+  background: rgba(13,27,42,0.55);
+  border: 1px solid rgba(201,168,76,0.32);
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: border-color 0.2s;
+}
+.btn-mute:hover { border-color: var(--gold); }
 
 /* ─── Timer bar ─── */
 #timer-bar-wrap {
   width: 100%;
-  padding: 1rem 1.5rem 0.6rem;
+  padding: 1rem 3.8rem 0.6rem 1.5rem; /* 우측: BGM 버튼 공간 확보 */
   display: flex;
   align-items: center;
   gap: 0.8rem;
@@ -237,9 +264,10 @@ body::before {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--gold);
-  letter-spacing: 0.12em;
-  min-width: 3rem;
+  letter-spacing: 0.08em;
+  min-width: 5.5rem;
   text-align: right;
+  image-rendering: pixelated;
 }
 
 /* ─── Cat stage ─── */
@@ -249,40 +277,41 @@ body::before {
   align-items: center;
   justify-content: center;
   width: 100%;
-  position: relative;  /* Matter.js canvas anchor */
+  position: relative;
   touch-action: none;
   overflow: hidden;
 }
 
 #cat-container {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   user-select: none;
   -webkit-user-select: none;
   cursor: pointer;
   touch-action: none;
-  padding: 3rem;
+  padding: 2rem;
   position: relative;
-  z-index: 1;          /* ASCII art above physics canvas */
+  z-index: 1;
 }
 
-#cat-ascii-main {
-  font-family: var(--font-mono);
-  font-size: clamp(2rem, 9vw, 3.2rem);
-  color: var(--gold-light);
-  line-height: 1.3;
-  transition: transform 0.12s, color 0.18s;
+/* 고양이 도트 스프라이트 */
+#cat-sprite {
+  width: clamp(150px, 48vw, 260px);
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter:
+    drop-shadow(0 18px 48px rgba(0,0,0,0.88))
+    drop-shadow(0 6px 14px rgba(0,0,0,0.72));
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+  display: block;
+  transition: filter 0.15s;
 }
 
-#cat-body {
-  font-family: var(--font-mono);
-  font-size: clamp(1rem, 4.5vw, 1.6rem);
-  color: rgba(201, 168, 76, 0.45);
-  letter-spacing: 0.6em;
-  margin-top: 0.25rem;
-  transition: transform 0.12s;
-}
-
-/* ─── Status popups ─── */
+/* ─── Status popups (픽셀 이모지) ─── */
 #popup-layer {
   position: fixed;
   inset: 0;
@@ -292,20 +321,18 @@ body::before {
 
 .status-popup {
   position: absolute;
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  font-weight: bold;
-  color: var(--gold);
-  text-shadow: 0 0 10px rgba(201, 168, 76, 0.55);
+  font-size: 1.9rem;
+  image-rendering: pixelated;
   white-space: nowrap;
-  animation: popup-float 1.25s ease-out forwards;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.45));
+  animation: popup-float 1.3s ease-out forwards;
   pointer-events: none;
 }
 
 @keyframes popup-float {
-  0%   { opacity: 1;   transform: translateY(0)      scale(1); }
-  55%  { opacity: 1;   transform: translateY(-1.8rem) scale(1.08); }
-  100% { opacity: 0;   transform: translateY(-3.2rem) scale(0.88); }
+  0%   { opacity: 1;   transform: translateY(0)       scale(1); }
+  50%  { opacity: 1;   transform: translateY(-2.2rem)  scale(1.15); }
+  100% { opacity: 0;   transform: translateY(-4rem)    scale(0.85); }
 }
 
 /* ─── Interaction hint ─── */
@@ -316,9 +343,9 @@ body::before {
   justify-content: center;
   align-items: center;
   gap: 0.55rem;
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
-  color: rgba(245, 240, 232, 0.38);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: rgba(245, 240, 232, 0.5);
 }
 
 .hint-sep {
@@ -552,41 +579,33 @@ body::before {
 }
 
 /* ══════════════════════════════════════
-   CAT IDLE ANIMATIONS
+   CAT SPRITE ANIMATIONS
 ══════════════════════════════════════ */
 @keyframes idle-breathe {
   0%, 100% { transform: scale(1)     translateY(0); }
-  50%       { transform: scale(1.022) translateY(-3px); }
+  50%       { transform: scale(1.025) translateY(-4px); }
 }
 
-@keyframes tail-wag {
-  0%, 100% { transform: rotate(0deg)    translateX(0); }
-  33%       { transform: rotate(1.2deg) translateX(2px); }
-  66%       { transform: rotate(-1.2deg) translateX(-2px); }
+@keyframes cat-float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
 }
 
-#scene-stay.active #cat-ascii-main {
-  animation: idle-breathe 3.8s ease-in-out infinite;
-}
-
-#scene-stay.active #cat-body {
-  animation: tail-wag 2.2s ease-in-out infinite;
-}
-
-/* ══════════════════════════════════════
-   CAT INTERACTION FEEDBACK
-══════════════════════════════════════ */
 @keyframes cat-bounce {
   0%   { transform: scale(1)    translateY(0); }
-  28%  { transform: scale(0.86) translateY(5px); }
-  60%  { transform: scale(1.06) translateY(-6px); }
+  28%  { transform: scale(0.86) translateY(6px); }
+  60%  { transform: scale(1.08) translateY(-8px); }
   80%  { transform: scale(0.97) translateY(2px); }
   100% { transform: scale(1)    translateY(0); }
 }
 
-.cat-bounce #cat-ascii-main,
-.cat-bounce #cat-body {
-  animation: cat-bounce 0.32s ease-out both !important;
+#scene-stay.active #cat-sprite {
+  animation: idle-breathe 3.8s ease-in-out infinite,
+             cat-float 5.5s ease-in-out infinite;
+}
+
+.cat-bounce #cat-sprite {
+  animation: cat-bounce 0.34s ease-out both !important;
 }
 
 /* ══════════════════════════════════════
