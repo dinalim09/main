@@ -552,6 +552,28 @@ body::before {
 }
 
 /* ══════════════════════════════════════
+   CAT IDLE ANIMATIONS
+══════════════════════════════════════ */
+@keyframes idle-breathe {
+  0%, 100% { transform: scale(1)     translateY(0); }
+  50%       { transform: scale(1.022) translateY(-3px); }
+}
+
+@keyframes tail-wag {
+  0%, 100% { transform: rotate(0deg)    translateX(0); }
+  33%       { transform: rotate(1.2deg) translateX(2px); }
+  66%       { transform: rotate(-1.2deg) translateX(-2px); }
+}
+
+#scene-stay.active #cat-ascii-main {
+  animation: idle-breathe 3.8s ease-in-out infinite;
+}
+
+#scene-stay.active #cat-body {
+  animation: tail-wag 2.2s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════
    CAT INTERACTION FEEDBACK
 ══════════════════════════════════════ */
 @keyframes cat-bounce {
@@ -564,7 +586,7 @@ body::before {
 
 .cat-bounce #cat-ascii-main,
 .cat-bounce #cat-body {
-  animation: cat-bounce 0.32s ease-out both;
+  animation: cat-bounce 0.32s ease-out both !important;
 }
 
 /* ══════════════════════════════════════

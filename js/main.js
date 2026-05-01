@@ -16,6 +16,9 @@ let timeLeft       = 180;
 // Physics
 let engine, render, runner, catBody;
 
+// Blink
+let blinkTimer = null;
+
 // Pointer tracking
 let pressStart    = null;
 let lastPos       = null;
@@ -31,6 +34,7 @@ const STROKE_THROTTLE = 380; // ms between stroke popups
 // ── Cat faces ─────────────────────────────
 const FACES = {
   idle:      '( ˘ ᆺ ˘ )',
+  blink:     '( - ᆺ - )',
   slow:      '( ´ ᆺ ` )',
   fast:      '( o ᆺ o ) !',
   tap:       '( ･ ᆺ･)',
@@ -44,6 +48,23 @@ function setCatFace(key, ms = 1200) {
   el._faceTimer = setTimeout(() => {
     el.textContent = FACES.idle;
   }, ms);
+}
+
+// ── Blink loop ────────────────────────────
+function scheduleNextBlink() {
+  blinkTimer = setTimeout(() => {
+    if (!isStayActive) return;
+    const el = document.getElementById('cat-ascii-main');
+    if (el.textContent === FACES.idle) {
+      el.textContent = FACES.blink;
+      setTimeout(() => {
+        if (el.textContent === FACES.blink) el.textContent = FACES.idle;
+        scheduleNextBlink();
+      }, 110);
+    } else {
+      scheduleNextBlink();
+    }
+  }, 2800 + Math.random() * 3500);
 }
 
 // ── Scene management ──────────────────────
@@ -286,9 +307,27 @@ function endStay() {
   showScene('scene-checkout');
 }
 
-// ── Save receipt (print) ──────────────────
+// ── Save receipt (html2canvas → PNG) ─────
 function saveReceipt() {
-  window.print();
+  const el = document.getElementById('receipt');
+  const btn = document.getElementById('btn-save');
+  btn.textContent = '저장 중...';
+  btn.disabled = true;
+
+  html2canvas(el, {
+    scale: 2,
+    backgroundColor: '#ffffff',
+    useCORS: true,
+    logging: false,
+  }).then(canvas => {
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `hwakance-receipt-${new Date().toISOString().slice(0,10)}.png`;
+    a.click();
+  }).finally(() => {
+    btn.textContent = '영수증 저장';
+    btn.disabled = false;
+  });
 }
 
 // ── Entry points ──────────────────────────
@@ -302,10 +341,15 @@ document.getElementById('btn-checkin').addEventListener('click', () => {
   initCatEvents();
   initPhysics();
   startTimer();
+  scheduleNextBlink();
   if (navigator.vibrate) navigator.vibrate(120);
 });
 
 document.getElementById('btn-restart').addEventListener('click', () => {
+  // 타이머·blink 정리
+  clearTimeout(blinkTimer);
+  blinkTimer = null;
+
   // Matter.js 정리 후 재시작
   if (runner) Runner.stop(runner);
   if (render) {
