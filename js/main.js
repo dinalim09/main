@@ -173,18 +173,30 @@ function showScene(id) {
   document.getElementById(id).classList.add('active');
 }
 
-// ── Blink loop (cat-sprite filter 로 표현) ─
+// ── Sprite swap ────────────────────────────
+const SPRITE_BASE = 'img/cat_';
+
+function setSprite(name, ms = 1200) {
+  const el = document.getElementById('cat-sprite');
+  if (!el) return;
+  el.src = `${SPRITE_BASE}${name}.png`;
+  clearTimeout(el._spriteTimer);
+  el._spriteTimer = setTimeout(() => {
+    el.src = `${SPRITE_BASE}idle.png`;
+  }, ms);
+}
+
+// ── Blink loop ─────────────────────────────
 function scheduleNextBlink() {
   blinkTimer = setTimeout(() => {
     if (!isStayActive) return;
-    const sprite = document.getElementById('cat-sprite');
-    if (!sprite) return;
-    sprite.style.filter =
-      'drop-shadow(0 18px 48px rgba(0,0,0,0.88)) drop-shadow(0 6px 14px rgba(0,0,0,0.72)) brightness(1.6)';
+    const el = document.getElementById('cat-sprite');
+    if (!el || !el.src.includes('idle')) { scheduleNextBlink(); return; }
+    el.src = `${SPRITE_BASE}blink.png`;
     setTimeout(() => {
-      if (sprite) sprite.style.filter = '';
+      if (el && el.src.includes('blink')) el.src = `${SPRITE_BASE}idle.png`;
       scheduleNextBlink();
-    }, 90);
+    }, 100);
   }, 2800 + Math.random() * 3500);
 }
 
@@ -204,6 +216,7 @@ function spawnPopup(icon, x, y) {
 function triggerSlow(x, y) {
   cleanupScore += 5;
   empathyScore += 2;
+  setSprite('slow', 1000);
   const icons = ['💖', '✨', '💖', '✨', '🌸'];
   spawnPopup(icons[Math.floor(Math.random() * icons.length)], x, y);
   playChime();
@@ -213,6 +226,7 @@ function triggerSlow(x, y) {
 function triggerFast(x, y) {
   cleanupScore    += 20;
   stressReduction += 3;
+  setSprite('fast', 700);
   spawnPopup('⚡', x, y);
   playCoin();
   if (navigator.vibrate) navigator.vibrate([25, 10, 25]);
@@ -220,6 +234,7 @@ function triggerFast(x, y) {
 
 function triggerTap(x, y) {
   cleanupScore += 1;
+  setSprite('tap', 600);
   spawnPopup('✨', x, y);
   playCoin();
   if (navigator.vibrate) navigator.vibrate(12);
@@ -238,6 +253,7 @@ function triggerTap(x, y) {
 
 function triggerLongPress(x, y) {
   empathyScore += 5;
+  setSprite('longpress', 2200);
   spawnPopup('💖', x, y);
   setTimeout(() => spawnPopup('💖', x - 30, y - 20), 180);
   setTimeout(() => spawnPopup('💖', x + 20, y - 10), 320);
@@ -478,6 +494,9 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   clearInterval(timerInterval);
   document.getElementById('timer-bar').style.setProperty('--progress', '1');
   document.getElementById('timer-label').textContent = '🐾 03:00';
+
+  const sprite = document.getElementById('cat-sprite');
+  if (sprite) sprite.src = `${SPRITE_BASE}idle.png`;
 
   showScene('scene-checkin');
 });
