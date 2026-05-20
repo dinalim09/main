@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>항공편 모션 데모</title>
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #191919;
+      font-family: 'Pretendard', -apple-system, 'Apple SD Gothic Neo', sans-serif;
+    }
+
+    #voronoi-svg {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #card {
+      position: fixed;
+      z-index: 100;
+      cursor: pointer;
+      overflow: hidden;
+      background: #1A1A1A;
+      border: 1px solid rgba(255,255,255,0.09);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.4),
+        0 8px 32px rgba(0,0,0,0.6),
+        0 2px 8px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding: 24px;
+      user-select: none;
+    }
+
+    /* ── 카드 내부 — 태그 ── */
+    #card-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #38F2C2;
+      color: #111;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 10px 3px 8px;
+      border-radius: 99px;
+      width: fit-content;
+    }
+    #card-tag::before {
+      content: '✈';
+      font-size: 11px;
+    }
+
+    /* ── 루트 행 ── */
+    #card-route {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .airport-block {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .iata {
+      font-size: 30px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .city-name {
+      font-size: 10px;
+      color: rgba(255,255,255,0.38);
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+    .flight-middle {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    .flight-line {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: rgba(255,255,255,0.18);
+      font-size: 14px;
+    }
+    .flight-line::before,
+    .flight-line::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.13); }
+    .duration {
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    /* ── 가격 ── */
+    #card-price {
+      font-size: 22px;
+      font-weight: 800;
+      color: #38F2C2;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    #card-price span {
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0;
+      margin-left: 4px;
+    }
+
+    /* ── 버튼 ── */
+    #card-actions {
+      display: flex;
+      gap: 8px;
+    }
+    #btn-book {
+      flex: 0 0 auto;
+      background: #38F2C2;
+      color: #111;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    #btn-more {
+      flex: 1;
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.45);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    #btn-book:hover { background: #5FFFD4; }
+    #btn-more:hover { background: rgba(255,255,255,0.08); }
+
+    /* ── 확장 상태 카드 내부 페이드 ── */
+    #card-expanded-content {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      opacity: 0;
+      pointer-events: none;
+      background: #191919;
+    }
+    #card-expanded-content .ex-label {
+      font-size: 13px;
+      color: rgba(255,255,255,0.3);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    #card-expanded-content .ex-title {
+      font-size: 48px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      text-align: center;
+    }
+    #card-expanded-content .ex-sub {
+      font-size: 16px;
+      color: rgba(255,255,255,0.4);
+      letter-spacing: -0.02em;
+      text-align: center;
+    }
+    #card-expanded-content .ex-accent {
+      display: inline-block;
+      color: #38F2C2;
+    }
+    #card-expanded-content .ex-tag {
+      margin-top: 8px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.2);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    #card-expanded-content .ex-back {
+      margin-top: 20px;
+      padding: 12px 32px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 99px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.45);
+      letter-spacing: 0.04em;
+      font-family: inherit;
+      background: transparent;
+      cursor: pointer;
+    }
+    #card-expanded-content .ex-back:hover {
+      border-color: rgba(56,242,194,0.4);
+      color: #38F2C2;
+    }
+
+    /* ── 힌트 텍스트 ── */
+    #hint {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: rgba(255,255,255,0.2);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      z-index: 200;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Layer 1: Voronoi SVG (D3가 채운다) -->
+  <svg id="voronoi-svg"></svg>
+
+  <!-- Layer 2: 중앙 카드 -->
+  <div id="card">
+    <span id="card-tag">항공 추천</span>
+
+    <div id="card-route">
+      <div class="airport-block">
+        <div class="iata">ICN</div>
+        <div class="city-name">서울 인천</div>
+      </div>
+      <div class="flight-middle">
+        <div class="flight-line">✈</div>
+        <div class="duration">2시간 30분</div>
+      </div>
+      <div class="airport-block" style="text-align:right">
+        <div class="iata">NRT</div>
+        <div class="city-name">도쿄 나리타</div>
+      </div>
+    </div>
+
+    <div id="card-price">396,500원<span>~ 왕복</span></div>
+
+    <div id="card-actions">
+      <button id="btn-book">예매하기</button>
+      <button id="btn-more">다른 항공편 보러 가기</button>
+    </div>
+
+    <!-- 확장 시 보이는 풀스크린 콘텐츠 -->
+    <div id="card-expanded-content">
+      <div class="ex-label">도쿄 직항 · 왕복</div>
+      <div class="ex-title">서울 → <span class="ex-accent">도쿄</span></div>
+      <div class="ex-sub">ICN &nbsp;✈&nbsp; NRT &nbsp;·&nbsp; 2시간 30분</div>
+      <div class="ex-sub" style="color:#38F2C2; font-weight:700; font-size:20px; letter-spacing:-0.03em;">396,500원~</div>
+      <div class="ex-tag">클릭하여 돌아가기</div>
+    </div>
+  </div>
+
+  <!-- 힌트 -->
+  <div id="hint">카드를 클릭하세요</div>
+
+  <script>
+    /* ─────────────────────────────────────────────
+       상수 & 상태
+    ───────────────────────────────────────────── */
+    const CARD_W = 380;
+    const CARD_H = 268;
+    const CARD_R = 20;
+
+    let state = 'idle';       // 'idle' | 'expanded'
+    let isAnimating = false;
+    let cells = [];           // { el, cx, cy }
+    let initLeft = 0;
+    let initTop  = 0;
+
+    /* ─────────────────────────────────────────────
+       보로노이 생성
+    ───────────────────────────────────────────── */
+    const ACCENT_PALETTE = [
+      '#38F2C2', '#D9FF3A', '#3A7BFF', '#B06EFF',
+      '#FF5F6D', '#38F2C2', '#1A1A1A', '#111111',
+      '#D9FF3A', '#3A7BFF', '#38F2C2', '#B06EFF',
+      '#1A1A1A', '#FF5F6D', '#111111'
+    ];
+
+    function buildVoronoi() {
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const cx = W / 2;
+      const cy = H / 2;
+      const minR = Math.min(W, H) * 0.28;
+      const maxR = Math.min(W, H) * 1.0;
+
+      /* 씨앗 생성 — 도넛 분포로 중앙 카드 영역 비워두기 */
+      const rng = d3.randomUniform.source(d3.randomLcg(42));
+      const seeds = [];
+
+      for (let i = 0; i < 26; i++) {
+        const angle = rng(0)() * Math.PI * 2;
+        const r = minR + rng(0)() * (maxR - minR);
+        seeds.push([cx + r * Math.cos(angle), cy + r * Math.sin(angle)]);
+      }
+      /* 코너 앵커 — 엣지 셀이 너무 커지는 것 방지 */
+      seeds.push([8, 8], [W - 8, 8], [8, H - 8], [W - 8, H - 8]);
+      seeds.push([W * 0.5, 8], [8, H * 0.5], [W - 8, H * 0.5], [W * 0.5, H - 8]);
+
+      const delaunay = d3.Delaunay.from(seeds);
+      const voronoi  = delaunay.voronoi([0, 0, W, H]);
+
+      const svg = d3.select('#voronoi-svg');
+      svg.selectAll('*').remove();
+
+      const defs = svg.append('defs');
+      const cellGroup = svg.append('g').attr('id', 'cell-group');
+
+      cells = [];
+
+      seeds.forEach((seed, i) => {
+        const poly = voronoi.cellPolygon(i);
+        if (!poly || poly.length < 3) return;
+
+        const pcx = d3.polygonCentroid(poly)[0];
+        const pcy = d3.polygonCentroid(poly)[1];
+        const color = ACCENT_PALETTE[i % ACCENT_PALETTE.length];
+        const gradAngle = 100 + (i * 37 % 120) - 60;
+        const isDark = color === '#1A1A1A' || color === '#111111';
+
+        /* 그라디언트 정의 */
+        defs.append('linearGradient')
+          .attr('id', `g${i}`)
+          .attr('gradientUnits', 'userSpaceOnUse')
+          .attr('x1', pcx + Math.cos(gradAngle * Math.PI / 180) * 120)
+          .attr('y1', pcy + Math.sin(gradAngle * Math.PI / 180) * 120)
+          .attr('x2', pcx - Math.cos(gradAngle * Math.PI / 180) * 120)
+          .attr('y2', pcy - Math.sin(gradAngle * Math.PI / 180) * 120)
+          .call(g => {
+            g.append('stop').attr('offset', '0%')
+              .attr('stop-color', isDark ? '#141414' : color)
+              .attr('stop-opacity', isDark ? 1 : 0.82);
+            g.append('stop').attr('offset', '100%')
+              .attr('stop-color', '#0D0D0D')
+              .attr('stop-opacity', 1);
+          });
+
+        /* 셀 경로 */
+        const pathData = voronoi.renderCell(i);
+        const tiltAngle = (((i * 73) % 50) - 25); // 결정론적 기울기 -25°~+25°
+
+        const el = cellGroup.append('path')
+          .attr('d', pathData)
+          .attr('fill', `url(#g${i})`)
+          .attr('stroke', 'rgba(0,0,0,0.75)')
+          .attr('stroke-width', 2)
+          .attr('stroke-linejoin', 'round')
+          .attr('transform', `rotate(${tiltAngle}, ${pcx}, ${pcy})`)
+          .node();
+
+        cells.push({ el, cx: pcx, cy: pcy });
+      });
+    }
+
+    /* ─────────────────────────────────────────────
+       카드 확장 애니메이션
+    ───────────────────────────────────────────── */
+    function expand() {
+      isAnimating = true;
+      gsap.killTweensOf('#card');
+      gsap.killTweensOf(cells.map(c => c.el));
+
+      const vpCX = window.innerWidth  / 2;
+      const vpCY = window.innerHeight / 2;
+      const vpDiag = Math.sqrt(vpCX * vpCX + vpCY * vpCY);
+
+      /* 카드 확장 */
+      gsap.to('#card', {
+        left: 0, top: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        borderRadius: 0,
+        duration: 1.15,
+        ease: 'power4.inOut',
+        onComplete: () => {
+          /* 확장 콘텐츠 페이드인 */
+          gsap.to('#card-expanded-content', {
+            opacity: 1, duration: 0.45, ease: 'power2.out',
+            onStart: () => {
+              document.getElementById('card-expanded-content').style.pointerEvents = 'auto';
+            }
+          });
+          state = 'expanded';
+          isAnimating = false;
+          document.getElementById('hint').textContent = '클릭하여 닫기';
+        }
+      });
+
+      /* 기존 카드 콘텐츠 페이드아웃 */
+      gsap.to(['#card-tag','#card-route','#card-price','#card-actions'], {
+        opacity: 0, duration: 0.3, ease: 'power2.in'
+      });
+
+      /* 셀 산란 */
+      cells.forEach((cell, i) => {
+        const dx  = cell.cx - vpCX;
+        const dy  = cell.cy - vpCY;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const factor = (vpDiag * 1.6) / len;
+
+        gsap.to(cell.el, {
+          x: dx * factor,
+          y: dy * factor,
+          opacity: 0,
+          duration: 0.9,
+          ease: 'expo.out',
+          delay: i * 0.022 + (i % 3) * 0.015
+        });
+      });
+    }
+
+    /* ─────────────────────────────────────────────
+       카드 축소 (복귀) 애니메이션
+    ───────────────────────────────────────────── */
+    function collapse() {
+      isAnimating = true;
+      gsap.killTweensOf('#card');
+      gsap.killTweensOf(cells.map(c => c.el));
+
+      /* 확장 콘텐츠 먼저 숨기기 */
+      gsap.to('#card-expanded-content', {
+        opacity: 0, duration: 0.25, ease: 'power2.in',
+        onComplete: () => {
+          document.getElementById('card-expanded-content').style.pointerEvents = 'none';
+        }
+      });
+
+      /* 카드 축소 */
+      gsap.to('#card', {
+        left: initLeft, top: initTop,
+        width: CARD_W, height: CARD_H,
+        borderRadius: CARD_R,
+        duration: 1.05,
+        ease: 'power4.inOut',
+        delay: 0.1
+      });
+
+      /* 기존 카드 콘텐츠 페이드인 */
+      gsap.to(['#card-tag','#card-route','#card-price','#card-actions'], {
+        opacity: 1, duration: 0.5, ease: 'power2.out', delay: 0.55
+      });
+
+      /* 셀 탄성 복귀 — 쫀득 효과 */
+      let lastIdx = cells.length - 1;
+      cells.forEach((cell, i) => {
+        const delay = 0.05 + i * 0.018 + (i % 4) * 0.01;
+        gsap.to(cell.el, {
+          x: 0, y: 0,
+          opacity: 1,
+          duration: 1.3,
+          ease: 'elastic.out(1.1, 0.48)',
+          delay,
+          onComplete: i === lastIdx
+            ? () => { state = 'idle'; isAnimating = false; document.getElementById('hint').textContent = '카드를 클릭하세요'; }
+            : undefined
+        });
+      });
+    }
+
+    /* ─────────────────────────────────────────────
+       초기화
+    ───────────────────────────────────────────── */
+    document.addEventListener('DOMContentLoaded', () => {
+      initLeft = Math.round(window.innerWidth  / 2 - CARD_W / 2);
+      initTop  = Math.round(window.innerHeight / 2 - CARD_H / 2);
+
+      gsap.set('#card', {
+        left: initLeft, top: initTop,
+        width: CARD_W, height: CARD_H,
+        borderRadius: CARD_R
+      });
+
+      buildVoronoi();
+
+      /* 카드 클릭 핸들러 */
+      document.getElementById('card').addEventListener('click', () => {
+        if (isAnimating) return;
+        if (state === 'idle') expand();
+        else collapse();
+      });
+
+      /* 내부 버튼은 카드 토글 차단 */
+      document.getElementById('btn-book').addEventListener('click', e => e.stopPropagation());
+      document.getElementById('btn-more').addEventListener('click', e => e.stopPropagation());
+      document.getElementById('card-expanded-content').addEventListener('click', e => e.stopPropagation());
+
+      /* 확장 콘텐츠 "돌아가기" 버튼 (별도 처리) */
+      const exContent = document.getElementById('card-expanded-content');
+      exContent.addEventListener('click', () => {
+        if (isAnimating) return;
+        if (state === 'expanded') collapse();
+      });
+    });
+
+    /* ─────────────────────────────────────────────
+       리사이즈 처리 (250ms debounce)
+    ───────────────────────────────────────────── */
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (state !== 'idle' || isAnimating) return;
+        initLeft = Math.round(window.innerWidth  / 2 - CARD_W / 2);
+        initTop  = Math.round(window.innerHeight / 2 - CARD_H / 2);
+        gsap.set('#card', { left: initLeft, top: initTop, width: CARD_W, height: CARD_H });
+        buildVoronoi();
+      }, 250);
+    });
+  </script>
+</body>
+</html>
